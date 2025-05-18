@@ -19,9 +19,9 @@ la **documenten** en este **readme.md**.
 Hasta este momento, solo he definido la estructura de los **equipos** debido a que la requería para el _Módulo 1_
 la estructura sigue la solicitada en el archivo de la profesora:
 
-´´´
-
-"_id": {
+```json
+{
+  "_id": {
     "$oid": "682980755eb98bb052c83b12"
   },
   "nombre": "Proyector Epson X41",
@@ -32,8 +32,9 @@ la estructura sigue la solicitada en el archivo de la profesora:
   "fecha_registro": {
     "$date": "2024-05-01T10:00:00Z"
   }
+}
+```
 
-´´´
 ## Visualización de los datos
 Les recomiendo utilizar **MongoDB Compass** y visualizar bien la estructura creada hasta el momento, también existe una extensión 
 para **VSCode** llamada **MongoDB** en la cual solo colocan la cadena de conexión y podrán visualizar la información.
