@@ -20,6 +20,7 @@ Hasta este momento, solo he definido la estructura de los **equipos** debido a q
 la estructura sigue la solicitada en el archivo de la profesora:
 
 ´´´
+
 "_id": {
     "$oid": "682980755eb98bb052c83b12"
   },
@@ -31,6 +32,7 @@ la estructura sigue la solicitada en el archivo de la profesora:
   "fecha_registro": {
     "$date": "2024-05-01T10:00:00Z"
   }
+
 ´´´
 ## Visualización de los datos
 Les recomiendo utilizar **MongoDB Compass** y visualizar bien la estructura creada hasta el momento, también existe una extensión 
