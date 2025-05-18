@@ -23,7 +23,6 @@ def buscar_por_campo(coleccion, campo, valor):
     if campo == "todos":
         return list(coleccion.find())
 
-    # Si es búsqueda por estado exacto, usar regex exacto
     if campo == "estado":
         filtro = {campo: {"$regex": f"^{valor}$", "$options": "i"}}
     else:
