@@ -11,8 +11,8 @@ class MiVentana:
         self.root = root
         self.root.title("Gestión de Equipamiento")
         self.root.geometry("1150x700")
-        self.base_font = ('Arial', 10)
-        self.title_font = ('Arial', 12, 'bold')  
+        self.base_font = ('Segoe UI', 10)
+        self.title_font = ('Segoe UI', 12, 'bold')  
         
         self.conexion_mongo()
         
@@ -64,9 +64,9 @@ class MiVentana:
         self.style = ttk.Style()
         self.style.theme_use('clam')
         
-        self.fondo_color = '#F7F7F7'  
+        self.fondo_color = '#F5F7FA'  
         self.entradas_color = '#FFFFFF'#color de fondo de las entradas
-        self.btn_color = '#00B7EB'#color de los botones
+        self.btn_color = '#3498DB'#color de los botones
         self.text_color = '#1F305E'#color del título
         #color de objetos al ser seleccionados=#753742
         
@@ -150,26 +150,26 @@ class MiVentana:
         parent.columnconfigure(1, weight=1, pad=10)
 
         ttk.Label(parent, text="Nombre:").grid(row=0, column=0, sticky=tk.W, pady=5)
-        self.nombre_entrada = ttk.Entry(parent, style='TEntry', font=('Arial', 10))
+        self.nombre_entrada = ttk.Entry(parent, style='TEntry', font=('Segoe UI', 10))
         self.nombre_entrada.grid(row=0, column=1, sticky=tk.EW, pady=5)
 
         ttk.Label(parent, text="Modelo:").grid(row=1, column=0, sticky=tk.W, pady=5)
-        self.modelo_entrada = ttk.Entry(parent, style='TEntry',font=('Arial', 10))
+        self.modelo_entrada = ttk.Entry(parent, style='TEntry',font=('Segoe UI', 10))
         self.modelo_entrada.grid(row=1, column=1, sticky=tk.EW, pady=5)
   
         ttk.Label(parent, text="Número de Serie:").grid(row=2, column=0, sticky=tk.W, pady=5)
-        self.numserie_entrada = ttk.Entry(parent, style='TEntry',font=('Arial', 10))
+        self.numserie_entrada = ttk.Entry(parent, style='TEntry',font=('Segoe UI', 10))
         self.numserie_entrada.grid(row=2, column=1, sticky=tk.EW, pady=5)
 
         ttk.Label(parent, text="Estado del equipo:").grid(row=3, column=0, sticky=tk.W, pady=5)
         self.estado_combobox = ttk.Combobox(parent, 
                                           values=["Disponible", "Prestado","En mantenimiento"],
-                                          style='TCombobox',font=('Arial', 10))
+                                          style='TCombobox',font=('Segoe UI', 10))
         self.estado_combobox.grid(row=3, column=1, sticky=tk.EW, pady=5)
         self.estado_combobox.current(0)
         
         ttk.Label(parent, text="Ubicación:").grid(row=4, column=0, sticky=tk.W, pady=5)
-        self.ubicacion_entrada = ttk.Entry(parent, style='TEntry',font=('Arial', 10))
+        self.ubicacion_entrada = ttk.Entry(parent, style='TEntry',font=('Segoe UI', 10))
         self.ubicacion_entrada.grid(row=4, column=1, sticky=tk.EW, pady=5)
     
     def crear_tabla(self, parent):
