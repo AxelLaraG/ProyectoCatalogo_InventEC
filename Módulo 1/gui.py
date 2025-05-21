@@ -101,3 +101,14 @@ class CatalogoGUI:
     def limpiar_tabla(self):
         for i in self.tree.get_children():
             self.tree.delete(i)
+
+    def insertar_en_tabla(self, equipos):
+        for equipo in equipos:
+            self.tree.insert("", tk.END, values=(
+                str(equipo.get("_id", "")),
+                formatear_valor(equipo.get("nombre")),
+                formatear_valor(equipo.get("modelo")),
+                formatear_valor(equipo.get("numero_serie")),
+                formatear_valor(equipo.get("estado")),
+                formatear_valor(equipo.get("ubicacion"))
+            ))
