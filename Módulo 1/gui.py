@@ -1,7 +1,7 @@
 import tkinter as tk
 from tkinter import ttk
 from conexion import conectar_mongo
-from operaciones import obtener_todos_los_equipos, buscar_por_campo
+from operaciones import obtener_todos_los_equipos, buscar_con_filtro_combinado
 from utils import formatear_valor
 
 class CatalogoGUI:
@@ -27,7 +27,6 @@ class CatalogoGUI:
             "Modelo": "modelo",
             "Número de serie": "numero_serie",
             "Ubicación": "ubicacion",
-            "Todos": "todos"
         }
 
         self.crear_widgets()
@@ -47,7 +46,7 @@ class CatalogoGUI:
 
         tk.Label(marco_busqueda, text="en", bg="#F5F7FA", font=("Segoe UI", 11)).grid(row=0, column=2)
         self.campo_busqueda = ttk.Combobox(marco_busqueda, values=list(self.opciones_busqueda.keys()), state="readonly")
-        self.campo_busqueda.set("Todos")
+        self.campo_busqueda.set("Nombre")
         self.campo_busqueda.grid(row=0, column=3, padx=5)
 
         btn_buscar = tk.Button(marco_busqueda, text="Buscar", command=self.buscar_equipo,
@@ -85,18 +84,20 @@ class CatalogoGUI:
         valor = self.entry_busqueda.get().strip().lower()
         campo_mostrado = self.campo_busqueda.get().strip()
         campo = self.opciones_busqueda.get(campo_mostrado, "todos")
-        self.limpiar_tabla()
-        equipos = buscar_por_campo(self.coleccion, campo, valor)
-        self.insertar_en_tabla(equipos)
-
-    def filtrar_estado(self, event):
         estado = self.combo_estado.get().strip().lower()
+
         self.limpiar_tabla()
-        if estado == "todos":
+
+        if not valor and campo == "todos" and estado == "todos":
             equipos = obtener_todos_los_equipos(self.coleccion)
         else:
-            equipos = buscar_por_campo(self.coleccion, "estado", estado)
+            equipos = buscar_con_filtro_combinado(self.coleccion, campo, valor, estado)
+
         self.insertar_en_tabla(equipos)
+
+
+    def filtrar_estado(self, event):
+        self.buscar_equipo()
 
     def limpiar_tabla(self):
         for i in self.tree.get_children():
