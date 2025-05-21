@@ -29,3 +29,20 @@ def buscar_por_campo(coleccion, campo, valor):
         filtro = {campo: {"$regex": valor, "$options": "i"}}
 
     return list(coleccion.find(filtro))
+
+def buscar_con_filtro_combinado(coleccion, campo, valor, estado):
+    filtros = {}
+
+    # Búsqueda por campo
+    if campo != "todos" and valor:
+        if campo == "estado":
+            filtros[campo] = {"$regex": f"^{valor}$", "$options": "i"}
+        else:
+            filtros[campo] = {"$regex": valor, "$options": "i"}
+
+    # Filtro por estado
+    if estado != "todos":
+        filtros["estado"] = {"$regex": f"^{estado}$", "$options": "i"}
+
+    return list(coleccion.find(filtros))
+
