@@ -1,251 +1,183 @@
 import tkinter as tk
-from tkinter import messagebox, Toplevel, ttk
+from tkinter import ttk, messagebox
 from pymongo import MongoClient
-import bcrypt
-import subprocess
-import sys
-import os
-import ast
-import datetime
+from pymongo.errors import ConnectionFailure, OperationFailure, ConfigurationError
+from bson.objectid import ObjectId # Importante para convertir el _id string a ObjectId
 
-try:
-    client = MongoClient('mongodb+srv://axmadlar:pw1234@cluster0.rrnubrd.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0', serverSelectionTimeoutMS=5000)
-    client.admin.command('ping')
-    db = client['proyecto']
-    users_collection = db['usuarios']
-    print("¡Conexión exitosa a MongoDB Atlas!")
-    USANDO_BD_SIMULADA = False
-except Exception as e:
-    print(f"No se pudo conectar a MongoDB Atlas: {e}")
-    messagebox.showerror("Error de Base de Datos", f"No se pudo conectar a MongoDB: {e}\nLa aplicación usará un modo de demostración.")
-    
-    class MockUsersCollection:
-        _users = {}
-        def __init__(self):
-            try:
-                password_plain = "adminpass"
-                hashed = bcrypt.hashpw(password_plain.encode('utf-8'), bcrypt.gensalt())
-                self._users["admin@example.com"] = {"email": "admin@example.com", "password_hash": hashed, "nombre": "Admin", "apellidos": "User"}
-            except Exception as bcrypt_e: print(f"Error mock bcrypt: {bcrypt_e}")
-        
-        def find_one(self, query):
-            user = self._users.get(query.get("email"))
-            return dict(user) if user else None
-        
-        def insert_one(self, document):
-            email = document.get("email")
-            if email in self._users:
-                raise Exception(f"MockDB: E11000 duplicate key error collection: demo.usuarios index: email_1 dup key: {{ email: \"{email}\" }}")
-            self._users[email] = document
-            class InsertOneResult:
-                def __init__(self, inserted_id):
-                    self.inserted_id = inserted_id
-            return InsertOneResult(email)
+# --- Configuración de MongoDB Atlas ---
+MONGO_URI = "mongodb+srv://axmadlar:pw1234@cluster0.rrnubrd.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
+DATABASE_NAME = "proyecto"
+COLLECTION_NAME = "usuarios"
 
-    users_collection = MockUsersCollection()
-    print("Usando colección SIMULADA (fallback) debido a error de conexión con MongoDB.")
-    USANDO_BD_SIMULADA = True
+class MongoDBCollectionViewer(tk.Tk):
+    def __init__(self):
+        super().__init__()
 
-def hash_password(password):
-    return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
+        self.title(f"Modulo de Gestión de Usuarios")
+        self.geometry("1000x650")
 
-def verify_password(plain_password, hashed_password_from_db):
-    if not isinstance(hashed_password_from_db, bytes):
-        if isinstance(hashed_password_from_db, str) and hashed_password_from_db.startswith("b'") :
-            try:
-                hashed_password_from_db = ast.literal_eval(hashed_password_from_db)
-            except: 
-                pass 
-    return bcrypt.checkpw(plain_password.encode('utf-8'), hashed_password_from_db)
+        self.mongo_uri = MONGO_URI
+        self.client = None
 
-def login_user():
-    email = entry_email_login.get()
-    password = entry_password_login.get()
+        # --- Frame para Controles ---
+        control_frame = ttk.Frame(self, padding="10")
+        control_frame.pack(fill=tk.X)
 
-    if not email or not password:
-        messagebox.showerror("Error de Login", "Correo electrónico y contraseña son requeridos.")
-        return
+        self.refresh_button = ttk.Button(control_frame, text="Actualizar Registros", command=self.load_records)
+        self.refresh_button.pack(side=tk.LEFT, padx=(0, 10))
 
-    try:
-        user_data = users_collection.find_one({"email": email})
+        self.toggle_button = ttk.Button(control_frame, text="Alternar Estado Préstamo", command=self.toggle_prestamo_status)
+        self.toggle_button.pack(side=tk.LEFT, padx=(0,10))
 
-        if user_data and 'password_hash' in user_data:
-            if verify_password(password, user_data['password_hash']):
-                nombre_usuario = user_data.get("nombre", email)
-                messagebox.showinfo("Login Exitoso", f"Bienvenido, {nombre_usuario}!\nSerás redirigido.")
-                
-                login_window.destroy()
-                
-                directorio_actual = os.path.dirname(os.path.abspath(__file__))
-                
-                ruta_carpeta_externa = "./Módulo 1" 
-                nombre_script_externo = "main.py"
+        self.status_label = ttk.Label(control_frame, text="Iniciando...") # Cambiado el texto inicial
+        self.status_label.pack(side=tk.LEFT, fill=tk.X, expand=True)
 
-                ruta_completa_script = os.path.join(ruta_carpeta_externa, nombre_script_externo)
-                ruta_absoluta_script_externo = os.path.abspath(ruta_completa_script)
+        # --- Frame para la Tabla (Treeview) ---
+        table_frame = ttk.Frame(self, padding="10")
+        table_frame.pack(fill=tk.BOTH, expand=True)
 
-                print(f"Intentando ejecutar: {ruta_absoluta_script_externo}")
+        columns = ("nombre", "apellidos", "email", "prestamos")
+        self.tree = ttk.Treeview(table_frame, columns=columns, show="headings", height=15)
 
-                if os.path.exists(ruta_absoluta_script_externo) and ruta_absoluta_script_externo.endswith(".py"):
-                    try:
-                        subprocess.Popen([sys.executable, ruta_absoluta_script_externo])
-                        print(f"Script '{nombre_script_externo}' lanzado exitosamente.")
-                    except Exception as e_exec:
-                        messagebox.showerror("Error de Redirección", f"No se pudo ejecutar el script externo:\n{e_exec}")
-                        print(f"Error al ejecutar script externo '{ruta_absoluta_script_externo}': {e_exec}")
-                else:
-                    messagebox.showerror("Error de Redirección", f"No se encontró el script externo en:\n{ruta_absoluta_script_externo}\n\nVerifica la ruta configurada en el código.")
-                    print(f"Script externo no encontrado: {ruta_absoluta_script_externo}")
-                
-                return
-            else:
-                messagebox.showerror("Error de Login", "Correo electrónico o contraseña incorrectos.")
-        else:
-            messagebox.showerror("Error de Login", "Correo electrónico o contraseña incorrectos.")
+        self.tree.heading("nombre", text="Nombre")
+        self.tree.heading("apellidos", text="Apellidos")
+        self.tree.heading("email", text="Email")
+        self.tree.heading("prestamos", text="Préstamos Autorizados")
 
-    except Exception as e:
-        messagebox.showerror("Error", f"Ocurrió un error durante el login: {e}")
-        print(f"Error de login: {e}")
+        self.tree.column("nombre", width=150, minwidth=100, stretch=tk.YES)
+        self.tree.column("apellidos", width=200, minwidth=150, stretch=tk.YES)
+        self.tree.column("email", width=250, minwidth=200, stretch=tk.YES)
+        self.tree.column("prestamos", width=150, minwidth=120, anchor=tk.CENTER, stretch=tk.YES)
 
-def open_registration_window():
-    global entry_reg_nombre, entry_reg_apellidos, entry_reg_email, entry_reg_password
-    global entry_reg_confirm_password, entry_reg_telefono, entry_reg_cargo
-    global var_experiencia, var_terminos, var_privacidad, registration_window
+        v_scrollbar = ttk.Scrollbar(table_frame, orient=tk.VERTICAL, command=self.tree.yview)
+        self.tree.configure(yscrollcommand=v_scrollbar.set)
+        v_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
-    registration_window = Toplevel(login_window)
-    registration_window.title("Registrar Nuevo Usuario")
-    registration_window.geometry("500x500") 
-    registration_window.resizable(False, False)
-    
-    login_x = login_window.winfo_x(); login_y = login_window.winfo_y()
-    login_width = login_window.winfo_width(); login_height = login_window.winfo_height()
-    reg_width = 500; reg_height = 500 
-    reg_x = login_x + (login_width // 2) - (reg_width // 2)
-    reg_y = login_y + (login_height // 2) - (reg_height // 2)
-    registration_window.geometry(f'{reg_width}x{reg_height}+{reg_x}+{reg_y}')
-    
-    reg_frame = tk.Frame(registration_window, padx=20, pady=20); reg_frame.pack(expand=True, fill="both")
-    
-    current_row = 0
-    tk.Label(reg_frame, text="Nombre(s):").grid(row=current_row, column=0, sticky="w", pady=(0,5))
-    entry_reg_nombre = tk.Entry(reg_frame, width=40); entry_reg_nombre.grid(row=current_row, column=1, pady=(0,5))
-    current_row += 1
+        h_scrollbar = ttk.Scrollbar(table_frame, orient=tk.HORIZONTAL, command=self.tree.xview)
+        self.tree.configure(xscrollcommand=h_scrollbar.set)
+        h_scrollbar.pack(side=tk.BOTTOM, fill=tk.X)
 
-    tk.Label(reg_frame, text="Apellidos:").grid(row=current_row, column=0, sticky="w", pady=(0,5))
-    entry_reg_apellidos = tk.Entry(reg_frame, width=40); entry_reg_apellidos.grid(row=current_row, column=1, pady=(0,5))
-    current_row += 1
+        self.tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
-    tk.Label(reg_frame, text="Correo Electrónico:").grid(row=current_row, column=0, sticky="w", pady=(0,5))
-    entry_reg_email = tk.Entry(reg_frame, width=40); entry_reg_email.grid(row=current_row, column=1, pady=(0,5))
-    current_row += 1
-    
-    tk.Label(reg_frame, text="Contraseña:").grid(row=current_row, column=0, sticky="w", pady=(0,5))
-    entry_reg_password = tk.Entry(reg_frame, show="*", width=40); entry_reg_password.grid(row=current_row, column=1, pady=(0,5))
-    current_row += 1
-    
-    tk.Label(reg_frame, text="Confirmar Contraseña:").grid(row=current_row, column=0, sticky="w", pady=(0,10))
-    entry_reg_confirm_password = tk.Entry(reg_frame, show="*", width=40); entry_reg_confirm_password.grid(row=current_row, column=1, pady=(0,10))
-    current_row += 1
+        # --- Cargar registros automáticamente al inicio ---
+        self.load_records() # <--- ESTA LÍNEA SE ACTIVA/AÑADE
 
-    tk.Label(reg_frame, text="Número de Teléfono:").grid(row=current_row, column=0, sticky="w", pady=(0,5))
-    entry_reg_telefono = tk.Entry(reg_frame, width=40); entry_reg_telefono.grid(row=current_row, column=1, pady=(0,5))
-    current_row += 1
-    
-    var_terminos = tk.BooleanVar()
-    chk_terminos = tk.Checkbutton(reg_frame, text="Acepto los Términos y Condiciones de Uso", variable=var_terminos)
-    chk_terminos.grid(row=current_row, column=0, columnspan=2, sticky="w", pady=(5,0))
-    current_row += 1
+    def get_mongo_client(self):
+        try:
+            # Revalida la conexión si ya existe un cliente o si self.client es None
+            if not self.client or not self.client.admin.command('ping'):
+                if self.client:
+                    try: self.client.close()
+                    except: pass
+                self.client = MongoClient(self.mongo_uri, serverSelectionTimeoutMS=10000)
+                self.client.admin.command('ping') # Verifica la nueva conexión
+            return self.client
+        except ConfigurationError as e:
+            self.status_label.config(text=f"Error de Configuración URI: {str(e)}", foreground="red")
+            messagebox.showerror("Error de Configuración", f"La URI de conexión no es válida: {str(e)}")
+            self.client = None
+            return None
+        except (ConnectionFailure, OperationFailure) as e:
+            self.status_label.config(text=f"Error de Conexión/Operación: {str(e)}", foreground="red")
+            messagebox.showerror("Error de Conexión", f"No se pudo conectar o validar la conexión a MongoDB Atlas.\nDetalle: {str(e)}")
+            self.client = None
+            return None
 
-    var_privacidad = tk.BooleanVar()
-    chk_privacidad = tk.Checkbutton(reg_frame, text="He leído y acepto la Política de Privacidad", variable=var_privacidad)
-    chk_privacidad.grid(row=current_row, column=0, columnspan=2, sticky="w", pady=(0,10))
-    current_row += 1
+    def load_records(self):
+        for item in self.tree.get_children():
+            self.tree.delete(item)
 
-    btn_submit_registration = tk.Button(reg_frame, text="Registrar", command=register_new_user, width=15)
-    btn_submit_registration.grid(row=current_row, column=0, columnspan=2, pady=(5,0))
-    
-    registration_window.transient(login_window); registration_window.grab_set(); login_window.wait_window(registration_window)
+        self.status_label.config(text=f"Cargando registros...", foreground="blue")
+        self.update_idletasks() # Asegura que el mensaje "Cargando..." se muestre
 
-def register_new_user():
-    nombre = entry_reg_nombre.get()
-    apellidos = entry_reg_apellidos.get()
-    email = entry_reg_email.get() 
-    password = entry_reg_password.get()
-    confirm_password = entry_reg_confirm_password.get()
-    telefono = entry_reg_telefono.get()
-    acepta_terminos = var_terminos.get()
-    acepta_privacidad = var_privacidad.get()
-
-    if not nombre or not apellidos or not email or not password or not confirm_password:
-        messagebox.showerror("Error de Registro", "Nombre, Apellidos, Correo Electrónico y Contraseña son requeridos.", parent=registration_window)
-        return
-    if password != confirm_password:
-        messagebox.showerror("Error de Registro", "Las contraseñas no coinciden.", parent=registration_window)
-        return
-    if len(password) < 6: 
-        messagebox.showerror("Error de Registro", "La contraseña debe tener al menos 6 caracteres.", parent=registration_window)
-        return
-    if not acepta_terminos:
-        messagebox.showerror("Error de Registro", "Debe aceptar los Términos y Condiciones.", parent=registration_window)
-        return
-    if not acepta_privacidad:
-        messagebox.showerror("Error de Registro", "Debe aceptar la Política de Privacidad.", parent=registration_window)
-        return
-
-    try:
-        if users_collection.find_one({"email": email}):
-            messagebox.showerror("Error de Registro", "El correo electrónico ya está registrado.", parent=registration_window)
+        client = self.get_mongo_client()
+        if not client:
+            self.status_label.config(text="Fallo al conectar. Verifica la consola o reintenta.", foreground="red")
             return
-        
-        hashed_pass = hash_password(password)
-        
-        user_document = {
-            "nombre": nombre,
-            "apellidos": apellidos,
-            "email": email, 
-            "password_hash": hashed_pass,
-            "telefono": telefono if telefono else None, 
-            "terminos_aceptados": acepta_terminos,
-            "privacidad_aceptada": acepta_privacidad,
-            "fecha_registro": datetime.datetime.utcnow() 
-        }
-        
-        insert_result = users_collection.insert_one(user_document)
-        
-        if USANDO_BD_SIMULADA or (hasattr(insert_result, 'inserted_id') and insert_result.inserted_id):
-            messagebox.showinfo("Registro Exitoso", "Usuario registrado exitosamente.", parent=registration_window)
-            registration_window.destroy()
-        else: 
-            messagebox.showerror("Error de Registro", "No se pudo registrar el usuario.", parent=registration_window)
 
-    except Exception as e:
-        if "E11000" in str(e) or "User already exists" in str(e) or "email_1 dup key" in str(e): 
-            messagebox.showerror("Error de Registro", "El correo electrónico ya está registrado.", parent=registration_window)
-        else: 
-            messagebox.showerror("Error de Registro", f"Ocurrió un error: {e}", parent=registration_window)
-        print(f"Error de registro: {e}")
+        try:
+            db = client[DATABASE_NAME]
+            collection = db[COLLECTION_NAME]
+            records = list(collection.find({}))
 
+            if records:
+                for record in records:
+                    record_id_str = str(record.get('_id'))
+                    nombre = record.get('nombre', 'N/D')
+                    apellidos = record.get('apellidos', 'N/D')
+                    email = record.get('email', 'N/D')
 
-login_window = tk.Tk()
-login_window.title("Login - Catálogo Digital")
-login_window.geometry("350x250") 
-login_window.resizable(False, False)
+                    autorizado_raw = record.get('autorizado_para_prestamos')
+                    estado_prestamo = "Autorizado" if autorizado_raw is True else "Denegado"
 
-window_width = 350; window_height = 250
-screen_width = login_window.winfo_screenwidth(); screen_height = login_window.winfo_screenheight()
-center_x = int(screen_width/2 - window_width / 2); center_y = int(screen_height/2 - window_height / 2)
-login_window.geometry(f'{window_width}x{window_height}+{center_x}+{center_y}')
+                    self.tree.insert("", tk.END, iid=record_id_str, values=(nombre, apellidos, email, estado_prestamo))
+                self.status_label.config(text=f"Se encontraron {len(records)} registros.", foreground="green")
+            else:
+                self.status_label.config(text=f"No se encontraron registros en '{COLLECTION_NAME}'.", foreground="orange")
 
-main_frame = tk.Frame(login_window, padx=20, pady=20); main_frame.pack(expand=True, fill="both")
+        except OperationFailure as e:
+            error_msg = e.details.get('errmsg', str(e))
+            self.status_label.config(text=f"Error al cargar: {error_msg}", foreground="red")
+            messagebox.showerror("Error de MongoDB", f"No se pudieron obtener los registros: {error_msg}")
+        except Exception as e:
+            self.status_label.config(text=f"Error inesperado al cargar: {str(e)}", foreground="red")
+            messagebox.showerror("Error Inesperado", f"Ocurrió un error: {str(e)}")
 
-lbl_email_login = tk.Label(main_frame, text="Correo Electrónico:"); lbl_email_login.grid(row=0, column=0, sticky="w", pady=(0, 5))
-entry_email_login = tk.Entry(main_frame, width=30); entry_email_login.grid(row=0, column=1, pady=(0, 5)) 
+    def toggle_prestamo_status(self):
+        selected_item_iid = self.tree.focus()
 
-lbl_password_login = tk.Label(main_frame, text="Contraseña:"); lbl_password_login.grid(row=1, column=0, sticky="w", pady=(0, 10))
-entry_password_login = tk.Entry(main_frame, show="*", width=30); entry_password_login.grid(row=1, column=1, pady=(0, 10)) 
+        if not selected_item_iid:
+            messagebox.showwarning("Selección Requerida", "Por favor, selecciona un usuario de la tabla para cambiar su estado de préstamo.")
+            return
 
-btn_login = tk.Button(main_frame, text="Ingresar", command=login_user, width=15); btn_login.grid(row=2, column=0, columnspan=2, pady=(5,5))
-btn_register_prompt = tk.Button(main_frame, text="Registrarse", command=open_registration_window, width=15)
-btn_register_prompt.grid(row=3, column=0, columnspan=2, pady=(5,0))
+        try:
+            current_values = self.tree.item(selected_item_iid, 'values')
+            current_prestamo_display_status = current_values[3]
 
-login_window.mainloop()
+            new_boolean_status = (current_prestamo_display_status == "Denegado")
+            mongo_doc_id = ObjectId(selected_item_iid)
+
+            client = self.get_mongo_client()
+            if not client:
+                messagebox.showerror("Error de Conexión", "No se pudo conectar a MongoDB para actualizar.")
+                return
+
+            db = client[DATABASE_NAME]
+            collection = db[COLLECTION_NAME]
+
+            update_result = collection.update_one(
+                {'_id': mongo_doc_id},
+                {'$set': {'autorizado_para_prestamos': new_boolean_status}}
+            )
+
+            if update_result.modified_count > 0:
+                messagebox.showinfo("Éxito", f"El estado de préstamo ha sido cambiado a {'Autorizado' if new_boolean_status else 'Denegado'}.")
+                self.load_records()
+            elif update_result.matched_count == 1 and update_result.modified_count == 0:
+                 messagebox.showinfo("Información", "El estado del préstamo ya era el solicitado. No se realizaron cambios.")
+            else:
+                messagebox.showerror("Error de Actualización", "No se pudo encontrar o actualizar el usuario.")
+
+        except OperationFailure as e:
+            error_msg = e.details.get('errmsg', str(e))
+            self.status_label.config(text=f"Error al actualizar: {error_msg}", foreground="red")
+            messagebox.showerror("Error de MongoDB", f"No se pudo actualizar el estado: {error_msg}")
+        except IndexError:
+            messagebox.showerror("Error Interno", "No se pudieron obtener los datos del usuario seleccionado.")
+        except Exception as e:
+            self.status_label.config(text=f"Error inesperado al actualizar: {str(e)}", foreground="red")
+            messagebox.showerror("Error Inesperado", f"Ocurrió un error al cambiar el estado: {str(e)}")
+
+    def on_closing(self):
+        if self.client:
+            try:
+                self.client.close()
+                print("Conexión a MongoDB cerrada.")
+            except Exception as e:
+                print(f"Error al cerrar la conexión de MongoDB: {e}")
+        self.destroy()
+
+if __name__ == "__main__":
+    app = MongoDBCollectionViewer()
+    app.protocol("WM_DELETE_WINDOW", app.on_closing)
+    app.mainloop()
