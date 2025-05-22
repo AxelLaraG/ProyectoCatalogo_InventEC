@@ -57,7 +57,7 @@ class AppPrestamos:
         self.usuario_dao = UsuarioDAO(self.db)
 
         root.title("Gestión de Préstamos de Equipos")
-        root.geometry("700x550")
+        root.geometry("700x200")
 
         self.create_widgets()
         self.load_equipos()
@@ -68,11 +68,11 @@ class AppPrestamos:
         frame.pack(padx=10, pady=10, fill=tk.BOTH, expand=True)
 
         ttk.Label(frame, text="Equipo:").grid(row=0, column=0, sticky=tk.W)
-        self.combo_equipo = ttk.Combobox(frame, state="readonly")
+        self.combo_equipo = ttk.Combobox(frame, state="readonly", width=50)
         self.combo_equipo.grid(row=0, column=1, sticky=tk.W)
 
         ttk.Label(frame, text="Usuario:").grid(row=1, column=0, sticky=tk.W)
-        self.combo_usuario = ttk.Combobox(frame, state="readonly")
+        self.combo_usuario = ttk.Combobox(frame, state="readonly", width=50)
         self.combo_usuario.grid(row=1, column=1, sticky=tk.W)
 
         ttk.Label(frame, text="Fecha Préstamo:").grid(row=2, column=0, sticky=tk.W)
@@ -80,22 +80,22 @@ class AppPrestamos:
         self.date_prestamo.grid(row=2, column=1, sticky=tk.W, padx=(0,5))
         self.hour_prestamo = ttk.Spinbox(frame, from_=0, to=23, width=3, format="%02.0f")
         self.hour_prestamo.set("10")
-        self.hour_prestamo.grid(row=2, column=2, sticky=tk.W)
-        ttk.Label(frame, text=":").grid(row=2, column=3, sticky=tk.W)
+        self.hour_prestamo.grid(row=2, column=1, sticky=tk.W, padx=(130,5))
+        ttk.Label(frame, text=":").grid(row=2, column=1, sticky=tk.W, padx=(180,5))
         self.minute_prestamo = ttk.Spinbox(frame, from_=0, to=59, width=3, format="%02.0f")
         self.minute_prestamo.set("00")
-        self.minute_prestamo.grid(row=2, column=4, sticky=tk.W)
+        self.minute_prestamo.grid(row=2, column=1, sticky=tk.W, padx=(185,5))
 
         ttk.Label(frame, text="Fecha Devolución Prevista:").grid(row=3, column=0, sticky=tk.W)
         self.date_devol_prev = DateEntry(frame, date_pattern="yyyy-MM-dd")
         self.date_devol_prev.grid(row=3, column=1, sticky=tk.W, padx=(0,5))
         self.hour_devol_prev = ttk.Spinbox(frame, from_=0, to=23, width=3, format="%02.0f")
         self.hour_devol_prev.set("10")
-        self.hour_devol_prev.grid(row=3, column=2, sticky=tk.W)
-        ttk.Label(frame, text=":").grid(row=3, column=3, sticky=tk.W)
+        self.hour_devol_prev.grid(row=3, column=1, sticky=tk.W, padx=(130,5))
+        ttk.Label(frame, text=":").grid(row=3, column=1, sticky=tk.W, padx=(180,5))
         self.minute_devol_prev = ttk.Spinbox(frame, from_=0, to=59, width=3, format="%02.0f")
         self.minute_devol_prev.set("00")
-        self.minute_devol_prev.grid(row=3, column=4, sticky=tk.W)
+        self.minute_devol_prev.grid(row=3, column=1, sticky=tk.W, padx=(185,5))
 
         ttk.Label(frame, text="Comentarios:").grid(row=4, column=0, sticky=tk.W)
         self.entry_comentarios = ttk.Entry(frame, width=50)
@@ -112,8 +112,9 @@ class AppPrestamos:
 
     def load_usuarios(self):
         usuarios = self.usuario_dao.listar_usuarios()
-        self.usuarios_map = {str(u['_id']): u for u in usuarios}
-        self.combo_usuario['values'] = [f"{u['nombre']} (ID: {u['_id']})" for u in usuarios]
+        disponibles = [u for u in usuarios if u['autorizado_para_prestamos'] == True]
+        self.usuarios_map = {str(u['_id']): u for u in disponibles}
+        self.combo_usuario['values'] = [f"{u['nombre']} {u['apellidos']} (ID: {u['_id']})" for u in disponibles]
 
     def registrar_prestamo(self):
         try:
@@ -146,26 +147,34 @@ class AppPrestamos:
             messagebox.showerror("Error", str(e))
 
     def registrar_devolucion(self):
-        # Obtener préstamos pendientes
         pendientes = list(self.db['prestamos'].find({"fecha_devolucion_real": None}))
         if not pendientes:
             messagebox.showinfo("Info", "No hay préstamos pendientes.")
             return
 
-        # Crear diálogo
         dlg = tk.Toplevel()
         dlg.title("Seleccionar préstamo a devolver")
-        dlg.geometry("400x300")
+        dlg.geometry("800x300")
 
-        lb = tk.Listbox(dlg, width=60, height=10)
+        lb = tk.Listbox(dlg, width=90, height=10)
         scrollbar = ttk.Scrollbar(dlg, orient="vertical", command=lb.yview)
         lb.configure(yscrollcommand=scrollbar.set)
 
-        # Mapear índices a _id
         self._pendientes_map = {}
         for idx, prest in enumerate(pendientes):
-            texto = (f"ID:{prest['_id']} — Equipo:{prest['equipo_id']} "
-                     f"Usuario:{prest['usuario_id']} Préstamo:{prest['fecha_prestamo'].strftime('%Y-%m-%d %H:%M')}")
+            try:
+                equipo = self.db['equipos'].find_one({"_id": ObjectId(prest['equipo_id'])})
+            except Exception:
+                equipo = None
+            try:
+                usuario = self.db['usuarios'].find_one({"_id": ObjectId(prest['usuario_id'])})
+            except Exception:
+                usuario = None
+            nombre_equipo = equipo['nombre'] if equipo else str(prest['equipo_id'])
+            nombre_usuario = usuario['nombre'] if usuario else str(prest['usuario_id'])
+
+            texto = (f"ID:{prest['_id']} — Equipo:{nombre_equipo} "
+                    f"Usuario:{nombre_usuario} Préstamo:{prest['fecha_prestamo'].strftime('%Y-%m-%d %H:%M')}")
             lb.insert(tk.END, texto)
             self._pendientes_map[idx] = prest
 
@@ -182,9 +191,7 @@ class AppPrestamos:
                 return
             prest = self._pendientes_map[sel[0]]
             fecha_real = datetime.now()
-            # Registrar devolución
             self.prestamo_dao.registrar_devolucion(prest['_id'], fecha_real)
-            # Actualizar estado del equipo
             self.equipo_dao.actualizar_estado(prest['equipo_id'], 'Disponible')
             messagebox.showinfo("Éxito", f"Devolución registrada a las {fecha_real.strftime('%Y-%m-%d %H:%M')}")
             dlg.destroy()
@@ -192,7 +199,6 @@ class AppPrestamos:
 
         ttk.Button(btn_frame, text="Confirmar devolución", command=confirmar).pack(side=tk.LEFT, padx=5)
 
-        # Hacer que el diálogo sea modal
         dlg.transient(self.root)
         dlg.grab_set()
         self.root.wait_window(dlg)
