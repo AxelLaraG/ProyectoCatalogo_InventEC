@@ -1,9 +1,10 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
-from pymongo import MongoClient, ASCENDING
+from pymongo import MongoClient
 from pymongo.errors import ConnectionFailure, OperationFailure, ConfigurationError
-from bson.objectid import ObjectId
+from bson.objectid import ObjectId # Importante para convertir el _id string a ObjectId
 
+# --- Configuración de MongoDB Atlas ---
 MONGO_URI = "mongodb+srv://axmadlar:pw1234@cluster0.rrnubrd.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
 DATABASE_NAME = "proyecto"
 COLLECTION_NAME = "usuarios"
@@ -12,34 +13,26 @@ class MongoDBCollectionViewer(tk.Tk):
     def __init__(self):
         super().__init__()
 
-        self.title("Modulo de Gestión de Usuarios")
+        self.title(f"Modulo de Gestión de Usuarios")
         self.geometry("1000x650")
 
         self.mongo_uri = MONGO_URI
         self.client = None
 
+        # --- Frame para Controles ---
         control_frame = ttk.Frame(self, padding="10")
         control_frame.pack(fill=tk.X)
 
-        self.refresh_button = ttk.Button(control_frame, text="Mostrar Todos/Actualizar", command=self.refresh_all_records)
+        self.refresh_button = ttk.Button(control_frame, text="Actualizar Registros", command=self.load_records)
         self.refresh_button.pack(side=tk.LEFT, padx=(0, 10))
-
-        self.search_label = ttk.Label(control_frame, text="Buscar por Email:")
-        self.search_label.pack(side=tk.LEFT, padx=(10, 2))
-        self.search_email_var = tk.StringVar()
-        self.search_email_entry = ttk.Entry(control_frame, textvariable=self.search_email_var, width=25)
-        self.search_email_entry.pack(side=tk.LEFT, padx=(0, 5))
-        self.search_email_entry.bind("<Return>", self.perform_search_event)
-
-        self.search_button = ttk.Button(control_frame, text="Buscar", command=self.perform_search)
-        self.search_button.pack(side=tk.LEFT, padx=(0, 10))
 
         self.toggle_button = ttk.Button(control_frame, text="Alternar Estado Préstamo", command=self.toggle_prestamo_status)
         self.toggle_button.pack(side=tk.LEFT, padx=(0,10))
 
-        self.status_label = ttk.Label(control_frame, text="Iniciando...")
+        self.status_label = ttk.Label(control_frame, text="Iniciando...") # Cambiado el texto inicial
         self.status_label.pack(side=tk.LEFT, fill=tk.X, expand=True)
 
+        # --- Frame para la Tabla (Treeview) ---
         table_frame = ttk.Frame(self, padding="10")
         table_frame.pack(fill=tk.BOTH, expand=True)
 
@@ -66,16 +59,18 @@ class MongoDBCollectionViewer(tk.Tk):
 
         self.tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
-        self.load_records()
+        # --- Cargar registros automáticamente al inicio ---
+        self.load_records() # <--- ESTA LÍNEA SE ACTIVA/AÑADE
 
     def get_mongo_client(self):
         try:
+            # Revalida la conexión si ya existe un cliente o si self.client es None
             if not self.client or not self.client.admin.command('ping'):
                 if self.client:
                     try: self.client.close()
                     except: pass
                 self.client = MongoClient(self.mongo_uri, serverSelectionTimeoutMS=10000)
-                self.client.admin.command('ping')
+                self.client.admin.command('ping') # Verifica la nueva conexión
             return self.client
         except ConfigurationError as e:
             self.status_label.config(text=f"Error de Configuración URI: {str(e)}", foreground="red")
@@ -88,23 +83,12 @@ class MongoDBCollectionViewer(tk.Tk):
             self.client = None
             return None
 
-    def refresh_all_records(self):
-        self.search_email_var.set("")
-        self.load_records()
-
-    def perform_search(self):
-        email_query = self.search_email_var.get().strip()
-        self.load_records(email_filter=email_query)
-
-    def perform_search_event(self, event):
-        self.perform_search()
-
-    def load_records(self, email_filter=None):
+    def load_records(self):
         for item in self.tree.get_children():
             self.tree.delete(item)
 
-        self.status_label.config(text="Cargando registros...", foreground="blue")
-        self.update_idletasks()
+        self.status_label.config(text=f"Cargando registros...", foreground="blue")
+        self.update_idletasks() # Asegura que el mensaje "Cargando..." se muestre
 
         client = self.get_mongo_client()
         if not client:
@@ -114,12 +98,7 @@ class MongoDBCollectionViewer(tk.Tk):
         try:
             db = client[DATABASE_NAME]
             collection = db[COLLECTION_NAME]
-
-            query_filter = {}
-            if email_filter:
-                query_filter["email"] = {"$regex": email_filter, "$options": "i"}
-
-            records = list(collection.find(query_filter).sort("apellidos", ASCENDING))
+            records = list(collection.find({}))
 
             if records:
                 for record in records:
@@ -127,15 +106,14 @@ class MongoDBCollectionViewer(tk.Tk):
                     nombre = record.get('nombre', 'N/D')
                     apellidos = record.get('apellidos', 'N/D')
                     email = record.get('email', 'N/D')
+
                     autorizado_raw = record.get('autorizado_para_prestamos')
                     estado_prestamo = "Autorizado" if autorizado_raw is True else "Denegado"
+
                     self.tree.insert("", tk.END, iid=record_id_str, values=(nombre, apellidos, email, estado_prestamo))
                 self.status_label.config(text=f"Se encontraron {len(records)} registros.", foreground="green")
             else:
-                if email_filter:
-                    self.status_label.config(text=f"No se encontraron registros con el email '{email_filter}'.", foreground="orange")
-                else:
-                    self.status_label.config(text=f"No se encontraron registros en '{COLLECTION_NAME}'.", foreground="orange")
+                self.status_label.config(text=f"No se encontraron registros en '{COLLECTION_NAME}'.", foreground="orange")
 
         except OperationFailure as e:
             error_msg = e.details.get('errmsg', str(e))
@@ -155,6 +133,7 @@ class MongoDBCollectionViewer(tk.Tk):
         try:
             current_values = self.tree.item(selected_item_iid, 'values')
             current_prestamo_display_status = current_values[3]
+
             new_boolean_status = (current_prestamo_display_status == "Denegado")
             mongo_doc_id = ObjectId(selected_item_iid)
 
@@ -173,9 +152,9 @@ class MongoDBCollectionViewer(tk.Tk):
 
             if update_result.modified_count > 0:
                 messagebox.showinfo("Éxito", f"El estado de préstamo ha sido cambiado a {'Autorizado' if new_boolean_status else 'Denegado'}.")
-                self.load_records(email_filter=self.search_email_var.get().strip() or None)
+                self.load_records()
             elif update_result.matched_count == 1 and update_result.modified_count == 0:
-                messagebox.showinfo("Información", "El estado del préstamo ya era el solicitado. No se realizaron cambios.")
+                 messagebox.showinfo("Información", "El estado del préstamo ya era el solicitado. No se realizaron cambios.")
             else:
                 messagebox.showerror("Error de Actualización", "No se pudo encontrar o actualizar el usuario.")
 
